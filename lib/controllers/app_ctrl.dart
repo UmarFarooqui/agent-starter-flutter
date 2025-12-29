@@ -7,6 +7,7 @@ import 'package:livekit_components/livekit_components.dart' as components;
 import 'package:logging/logging.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_background/flutter_background.dart';
 
 enum AppScreenState { welcome, agent }
 
@@ -115,8 +116,38 @@ class AppCtrl extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleScreenShare() {
-    isScreenshareEnabled = !isScreenshareEnabled;
+  void toggleScreenShare() async {
+    try {
+      if (isScreenshareEnabled) {
+        // Disable screen share
+        await room.localParticipant?.setScreenShareEnabled(false);
+        isScreenshareEnabled = false;
+        
+        // Stop the foreground service
+        if (await FlutterBackground.isBackgroundExecutionEnabled) {
+          await FlutterBackground.disableBackgroundExecution();
+        }
+      } else {
+        // Enable screen share - need to start foreground service first on Android
+        final androidConfig = FlutterBackgroundAndroidConfig(
+          notificationTitle: "Screen Sharing",
+          notificationText: "Screen sharing is active",
+          notificationImportance: AndroidNotificationImportance.normal,
+          notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+        );
+        
+        bool hasPermissions = await FlutterBackground.initialize(androidConfig: androidConfig);
+        if (hasPermissions) {
+          await FlutterBackground.enableBackgroundExecution();
+        }
+        
+        await room.localParticipant?.setScreenShareEnabled(true, captureScreenAudio: true);
+        isScreenshareEnabled = true;
+      }
+    } catch (e) {
+      _logger.warning('Failed to toggle screen share: $e');
+      isScreenshareEnabled = false;
+    }
     notifyListeners();
   }
 
