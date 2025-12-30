@@ -27,33 +27,33 @@ class AgentTrackView extends StatelessWidget {
             value:
                 agentParticipant == null ? null : components.TrackReferenceContext(agentParticipant, pub: mediaTrack),
             child: Builder(
-              builder: (ctx) {
-                final trackReferenceContext = ctx.watch<components.TrackReferenceContext?>();
-                final isVideo = trackReferenceContext?.isVideo ?? false;
+              builder: (ctx) => Container(
+                // color: Colors.red,
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 50),
+                alignment: Alignment.center,
+                child: Container(
+                  // color: Colors.blue,
+                  constraints: const BoxConstraints(maxHeight: 350),
+                  child: Builder(builder: (ctx) {
+                    final trackReferenceContext = ctx.watch<components.TrackReferenceContext?>();
+                    // Switch according to video or audio
 
-                return Container(
-                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 50),
-                  alignment: Alignment.center,
-                  child: Container(
-                    constraints: const BoxConstraints(maxHeight: 350),
-                    child: isVideo
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(15),
-                            child: const components.VideoTrackWidget(
-                              fit: sdk.VideoViewFit.contain,
-                            ),
-                          )
-                        : const components.AudioVisualizerWidget(
-                            options: components.AudioVisualizerWidgetOptions(
-                              barCount: 5,
-                              width: 32,
-                              minHeight: 32,
-                              maxHeight: 320,
-                            ),
-                          ),
-                  ),
-                );
-              },
+                    if (trackReferenceContext?.isVideo ?? false) {
+                      return const components.VideoTrackWidget();
+                    }
+
+                    return const components.AudioVisualizerWidget(
+                      options: components.AudioVisualizerWidgetOptions(
+                        barCount: 5,
+                        width: 32,
+                        minHeight: 32,
+                        maxHeight: 320,
+                        // color: Theme.of(ctx).colorScheme.primary,
+                      ),
+                    );
+                  }),
+                ),
+              ),
             ),
           ),
         ),

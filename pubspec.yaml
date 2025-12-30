@@ -46,7 +46,6 @@ dependencies:
   flutter_sficon: ^1.2.0
   intl: ^0.20.0
   logging: ^1.3.0
-  flutter_background: ^1.3.0
 
 dev_dependencies:
   flutter_test:
