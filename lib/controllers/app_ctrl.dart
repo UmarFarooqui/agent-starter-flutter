@@ -132,14 +132,39 @@ class AppCtrl extends ChangeNotifier {
         // Disable screen share
         await room.localParticipant?.setScreenShareEnabled(false);
         isScreenshareEnabled = false;
+        // Stop FlutterBackground
+        if (await FlutterBackground.isBackgroundExecutionEnabled) {
+          await FlutterBackground.disableBackgroundExecution();
+        }
       } else {
+        // Start FlutterBackground service BEFORE enabling screen share
+        var hasPermissions = await FlutterBackground.hasPermissions;
+        if (!hasPermissions) {
+          const androidConfig = FlutterBackgroundAndroidConfig(
+            notificationTitle: 'Screen Sharing',
+            notificationText: 'Sharing your screen',
+            notificationImportance: AndroidNotificationImportance.normal,
+          );
+          hasPermissions = await FlutterBackground.initialize(androidConfig: androidConfig);
+        }
+        
+        if (hasPermissions && !await FlutterBackground.isBackgroundExecutionEnabled) {
+          await FlutterBackground.enableBackgroundExecution();
+        }
+        
         // Enable screen share
         await room.localParticipant?.setScreenShareEnabled(true, captureScreenAudio: true);
         isScreenshareEnabled = true;
       }
-    } catch (e) {
-      _logger.warning('Failed to toggle screen share: $e');
+    } catch (e, stackTrace) {
+      _logger.warning('Failed to toggle screen share: $e\n$stackTrace');
       isScreenshareEnabled = false;
+      // Make sure to stop service on error
+      try {
+        if (await FlutterBackground.isBackgroundExecutionEnabled) {
+          await FlutterBackground.disableBackgroundExecution();
+        }
+      } catch (_) {}
     }
     notifyListeners();
   }

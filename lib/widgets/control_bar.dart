@@ -61,13 +61,25 @@ class ControlBar extends StatelessWidget {
                   ),
                 ),
               ),
-              const Flexible(
-                flex: 1,
-                fit: FlexFit.tight,
-                child: FloatingGlassButton(
-                  sfIcon: sf.SFIcons.sf_arrow_up_square_fill,
-                  // onTap: () => appCtrl.toggleScreenShare(),
-                ),
+              Selector<AppCtrl, bool>(
+                selector: (ctx, appCtx) {
+                  print('ControlBar: isScreenshareEnabled = ${appCtx.isScreenshareEnabled}');
+                  return appCtx.isScreenshareEnabled;
+                },
+                builder: (context, isScreenshareEnabled, child) {
+                  print('ControlBar: Building screen share button, enabled = $isScreenshareEnabled');
+                  return Flexible(
+                    flex: 1,
+                    fit: FlexFit.tight,
+                    child: FloatingGlassButton(
+                      sfIcon: isScreenshareEnabled ? sf.SFIcons.sf_arrow_up_square_fill : sf.SFIcons.sf_arrow_up_square,
+                      onTap: () {
+                        print('Screen share button tapped!');
+                        appCtrl.toggleScreenShare();
+                      },
+                    ),
+                  );
+                },
               ),
               Selector<AppCtrl, AgentScreenState>(
                 selector: (ctx, appCtx) => appCtx.agentScreenState,
