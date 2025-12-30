@@ -7,6 +7,7 @@ import 'package:livekit_components/livekit_components.dart' as components;
 import 'package:logging/logging.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_background/flutter_background.dart';
 
 enum AppScreenState { welcome, agent }
 
@@ -110,13 +111,36 @@ class AppCtrl extends ChangeNotifier {
   }
 
   void toggleUserCamera(components.MediaDeviceContext? deviceCtx) {
-    isUserCameEnabled = !isUserCameEnabled;
-    isUserCameEnabled ? deviceCtx?.enableCamera() : deviceCtx?.disableCamera();
-    notifyListeners();
+    try {
+      isUserCameEnabled = !isUserCameEnabled;
+      if (isUserCameEnabled) {
+        deviceCtx?.enableCamera();
+      } else {
+        deviceCtx?.disableCamera();
+      }
+      notifyListeners();
+    } catch (e) {
+      _logger.warning('Failed to toggle camera: $e');
+      isUserCameEnabled = !isUserCameEnabled; // Revert state on error
+      notifyListeners();
+    }
   }
 
-  void toggleScreenShare() {
-    isScreenshareEnabled = !isScreenshareEnabled;
+  void toggleScreenShare() async {
+    try {
+      if (isScreenshareEnabled) {
+        // Disable screen share
+        await room.localParticipant?.setScreenShareEnabled(false);
+        isScreenshareEnabled = false;
+      } else {
+        // Enable screen share
+        await room.localParticipant?.setScreenShareEnabled(true, captureScreenAudio: true);
+        isScreenshareEnabled = true;
+      }
+    } catch (e) {
+      _logger.warning('Failed to toggle screen share: $e');
+      isScreenshareEnabled = false;
+    }
     notifyListeners();
   }
 

@@ -11,52 +11,120 @@ import '../widgets/agent_layout_switcher.dart';
 import '../widgets/camera_toggle_button.dart';
 import '../widgets/message_bar.dart';
 
-class AgentTrackView extends StatelessWidget {
+class AgentTrackView extends StatefulWidget {
   const AgentTrackView({super.key});
 
   @override
+  State<AgentTrackView> createState() => _AgentTrackViewState();
+}
+
+class _AgentTrackViewState extends State<AgentTrackView> {
+  sdk.EventsListener<sdk.RoomEvent>? _roomListener;
+
+  @override
+  void dispose() {
+    _roomListener?.dispose();
+    super.dispose();
+  }
+
+  void _setupRoomListener(sdk.Room room) {
+    _roomListener?.dispose();
+    _roomListener = room.createListener();
+    
+    // Listen for track published and subscribed events
+    _roomListener!
+      ..on<sdk.TrackPublishedEvent>((event) {
+        print('AgentTrackView: TrackPublishedEvent from ${event.participant.identity}');
+        if (mounted) setState(() {});
+      })
+      ..on<sdk.TrackSubscribedEvent>((event) {
+        print('AgentTrackView: TrackSubscribedEvent from ${event.participant.identity}, track: ${event.track.sid}');
+        if (mounted) setState(() {});
+      })
+      ..on<sdk.ParticipantConnectedEvent>((event) {
+        print('AgentTrackView: ParticipantConnectedEvent: ${event.participant.identity}');
+        if (mounted) setState(() {});
+      });
+  }
+
+  @override
   Widget build(BuildContext context) => AgentParticipantSelector(
-        builder: (ctx, agentParticipant) => Selector<components.ParticipantContext?, sdk.TrackPublication?>(
-          selector: (ctx, agentCtx) {
-            final videoTrack = agentCtx?.tracks.where((t) => t.kind == sdk.TrackType.VIDEO).firstOrNull;
-            final audioTrack = agentCtx?.tracks.where((t) => t.kind == sdk.TrackType.AUDIO).firstOrNull;
-            // Prioritize video track
-            return videoTrack ?? audioTrack;
-          },
-          builder: (ctx, mediaTrack, child) => ChangeNotifierProvider<components.TrackReferenceContext?>.value(
-            value:
-                agentParticipant == null ? null : components.TrackReferenceContext(agentParticipant, pub: mediaTrack),
-            child: Builder(
-              builder: (ctx) => Container(
-                // color: Colors.red,
-                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 50),
-                alignment: Alignment.center,
-                child: Container(
-                  // color: Colors.blue,
-                  constraints: const BoxConstraints(maxHeight: 350),
-                  child: Builder(builder: (ctx) {
-                    final trackReferenceContext = ctx.watch<components.TrackReferenceContext?>();
-                    // Switch according to video or audio
+        builder: (ctx, agentParticipant) {
+          if (agentParticipant == null) {
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 50),
+              alignment: Alignment.center,
+              child: const Text('Waiting for agent...'),
+            );
+          }
 
-                    if (trackReferenceContext?.isVideo ?? false) {
-                      return const components.VideoTrackWidget();
-                    }
-
-                    return const components.AudioVisualizerWidget(
+          // Get the room to find the avatar agent
+          final roomContext = components.RoomContext.of(ctx);
+          if (roomContext == null) {
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 50),
+              alignment: Alignment.center,
+              child: const Text('Waiting for room...'),
+            );
+          }
+          
+          final room = roomContext.room;
+          
+          // Set up listener if not already done
+          if (_roomListener == null) {
+            _setupRoomListener(room);
+          }
+          
+          // Find the avatar agent that publishes on behalf of the main agent
+          sdk.Participant? avatarAgent;
+          try {
+            avatarAgent = room.remoteParticipants.values.firstWhere(
+              (p) => p.attributes['lk.publish_on_behalf'] == agentParticipant.identity,
+            );
+            print('AgentTrackView: Found avatar agent: ${avatarAgent.identity}');
+          } catch (e) {
+            // If no avatar agent found, use the agent participant itself
+            avatarAgent = agentParticipant;
+            print('AgentTrackView: No avatar agent found, using main agent: ${avatarAgent.identity}');
+          }
+          
+          // Check for video track first, then audio
+          final videoPublication = avatarAgent.trackPublications.values
+              .where((pub) => pub.kind == sdk.TrackType.VIDEO)
+              .firstOrNull;
+          
+          print('AgentTrackView: videoPublication found: ${videoPublication != null}, track: ${videoPublication?.track}, subscribed: ${videoPublication?.subscribed}, muted: ${videoPublication?.muted}');
+          
+          final hasVideo = videoPublication?.track != null && 
+                           videoPublication!.subscribed == true &&
+                           videoPublication.track is sdk.VideoTrack;
+          
+          print('AgentTrackView: hasVideo=$hasVideo, building widget');
+          
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 50),
+            alignment: Alignment.center,
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 350),
+              child: hasVideo
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: sdk.VideoTrackRenderer(
+                        videoPublication!.track as sdk.VideoTrack,
+                        fit: sdk.VideoViewFit.contain,
+                      ),
+                    )
+                  : const components.AudioVisualizerWidget(
                       options: components.AudioVisualizerWidgetOptions(
                         barCount: 5,
                         width: 32,
                         minHeight: 32,
                         maxHeight: 320,
-                        // color: Theme.of(ctx).colorScheme.primary,
                       ),
-                    );
-                  }),
-                ),
-              ),
+                    ),
             ),
-          ),
-        ),
+          );
+        },
       );
 }
 
@@ -146,11 +214,23 @@ class AgentScreen extends StatelessWidget {
               ),
             ),
             buildScreenShareView: (ctx) => Container(
-              alignment: Alignment.center,
+              clipBehavior: Clip.hardEdge,
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(15),
               ),
-              child: const Text('Screenshare View'),
+              child: components.ParticipantSelector(
+                filter: (identifier) => identifier.source == sdk.TrackSource.screenShareVideo && identifier.isLocal,
+                builder: (context, identifier) => components.VideoTrackWidget(
+                  fit: sdk.VideoViewFit.contain,
+                  noTrackBuilder: (ctx) => Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.3),
+                    ),
+                    child: const Text('Screen Share'),
+                  ),
+                ),
+              ),
             ),
             transcriptionsBuilder: (ctx) => Column(
               mainAxisSize: MainAxisSize.max,
